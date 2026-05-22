@@ -110,7 +110,8 @@ class MPEChannelAllocator:
 class TabletMPEDriver:
     def __init__(self, midi_port, pen_max_x=11180, pen_max_y=15340, touch_max_x=2049, touch_max_y=2814,
                  rotation='portrait', palm_rejection=True, base_note=36, octaves=4.0, pb_range=48,
-                 velocity=100, timbre_cc=74, pressure_cc='aftertouch', tilt_x_cc=16, tilt_y_cc=17):
+                 velocity=100, timbre_cc=74, pressure_cc='aftertouch', tilt_x_cc=16, tilt_y_cc=17,
+                 verbose=False):
         
         self.port = midi_port
         self.pen_max_x_p = pen_max_x
@@ -119,6 +120,7 @@ class TabletMPEDriver:
         self.touch_max_y_p = touch_max_y
         self.rotation = rotation
         self.palm_rejection = palm_rejection
+        self.verbose = verbose
         
         self.base_note = base_note
         self.octaves = octaves
@@ -303,8 +305,9 @@ class TabletMPEDriver:
             ch = self.allocator.release("pen")
             if ch is not None:
                 int_note = self.allocator.channel_notes[ch]
-                self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
-                self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
+                if int_note is not None:
+                    self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
+                    self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
                 self.allocator.channel_notes[ch] = None
                 console.print(f"[warning]Pen Note Off:[/warning] Channel {ch+1}, Note {int_note}")
 
@@ -367,8 +370,9 @@ class TabletMPEDriver:
                 ch = self.allocator.release(key)
                 if ch is not None:
                     int_note = self.allocator.channel_notes[ch]
-                    self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
-                    self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
+                    if int_note is not None:
+                        self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
+                        self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
                     self.allocator.channel_notes[ch] = None
                     console.print(f"[info]Touch Lifted Slot {slot}:[/info] Channel {ch+1}, Note {int_note}")
                 continue
@@ -422,6 +426,8 @@ class TabletMPEDriver:
                     pb_val = int(offset * 8192.0 / self.pb_range)
                     pb_val = max(-8192, min(8191, pb_val))
                     self.send_midi(mido.Message('pitchwheel', pitch=pb_val, channel=ch))
+                    if self.verbose:
+                        console.print(f"[info]Touch Moved Slot {slot}:[/info] Channel {ch+1}, Pitch Bend: {pb_val}")
                     
                     # Timbre Y
                     y_norm = max(0.0, min(1.0, rot_y / self.touch_max_y))
@@ -443,8 +449,9 @@ class TabletMPEDriver:
             ch = self.allocator.release(key)
             if ch is not None:
                 int_note = self.allocator.channel_notes[ch]
-                self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
-                self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
+                if int_note is not None:
+                    self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
+                    self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
                 self.allocator.channel_notes[ch] = None
                 console.print(f"[warning]Palm Cancelled Touch Slot {slot}[/warning]")
         self.mt_slots.clear()
@@ -458,8 +465,9 @@ class TabletMPEDriver:
         ch = self.allocator.release("pen")
         if ch is not None:
             int_note = self.allocator.channel_notes[ch]
-            self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
-            self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
+            if int_note is not None:
+                self.send_midi(mido.Message('note_off', note=int_note, velocity=0, channel=ch))
+                self.send_midi(mido.Message('pitchwheel', pitch=0, channel=ch))
             self.allocator.channel_notes[ch] = None
         # Send All Notes Off on all channels
         for ch in range(16):
@@ -519,6 +527,7 @@ def main():
     parser.add_argument("--no-pen", action="store_true", help="Disable pen input capturing")
     parser.add_argument("--no-touch", action="store_true", help="Disable touch input capturing")
     parser.add_argument("--midi-port", default="auto", help="MIDI port to connect to ('auto', 'virtual', or port name). Default: auto")
+    parser.add_argument("--verbose", action="store_true", help="Print verbose MIDI event logs")
     args = parser.parse_args()
 
     if args.no_pen and args.no_touch:
@@ -645,7 +654,8 @@ def main():
         timbre_cc=args.timbre_cc,
         pressure_cc=pressure_cc,
         tilt_x_cc=args.tilt_x_cc,
-        tilt_y_cc=args.tilt_y_cc
+        tilt_y_cc=args.tilt_y_cc,
+        verbose=args.verbose
     )
 
     q = queue.Queue()
